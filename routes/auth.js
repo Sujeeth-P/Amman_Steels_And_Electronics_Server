@@ -121,8 +121,8 @@ router.post('/signin', signinValidation, async (req, res) => {
 
         const { email, password } = req.body;
 
-        // Find user by email
-        const user = await User.findOne({ email });
+        // Find user by email (include password for comparison since it's excluded by default)
+        const user = await User.findOne({ email }).select('+password');
         if (!user) {
             return res.status(401).json({
                 success: false,
@@ -310,12 +310,20 @@ router.put('/change-password', async (req, res) => {
             });
         }
 
-        // Find user
-        const user = await User.findById(decoded.userId);
+        // Find user (include password for comparison)
+        const user = await User.findById(decoded.userId).select('+password');
         if (!user) {
             return res.status(404).json({
                 success: false,
                 message: 'User not found'
+            });
+        }
+
+        // Check if user signed up with Google (no password)
+        if (user.authProvider === 'google' && !user.password) {
+            return res.status(400).json({
+                success: false,
+                message: 'Google users cannot change password. Please use Google to sign in.'
             });
         }
 
@@ -352,4 +360,125 @@ router.put('/change-password', async (req, res) => {
     }
 });
 
+// @route   POST /api/auth/google
+// @desc    Authenticate with Google OAuth
+// @access  Public
+router.post('/google', async (req, res) => {
+    try {
+        const { credential, googleId, email, name, picture } = req.body;
+
+        let userData = {};
+
+        // Handle two different auth flows:
+        // 1. Direct user info from access token flow (new custom button)
+        // 2. JWT credential from GoogleLogin component (legacy)
+
+        if (googleId && email) {
+            // Direct user info flow
+            userData = {
+                email,
+                name: name || email.split('@')[0],
+                picture,
+                googleId
+            };
+        } else if (credential) {
+            // JWT credential flow (legacy)
+            try {
+                const base64Url = credential.split('.')[1];
+                const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+                const jsonPayload = decodeURIComponent(
+                    atob(base64)
+                        .split('')
+                        .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+                        .join('')
+                );
+
+                const googleUser = JSON.parse(jsonPayload);
+
+                // Validate the token has required fields
+                if (!googleUser.email || !googleUser.sub) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Invalid Google token'
+                    });
+                }
+
+                // Check token expiration
+                if (googleUser.exp * 1000 < Date.now()) {
+                    return res.status(401).json({
+                        success: false,
+                        message: 'Google token has expired'
+                    });
+                }
+
+                userData = {
+                    email: googleUser.email,
+                    name: googleUser.name || googleUser.email.split('@')[0],
+                    picture: googleUser.picture,
+                    googleId: googleUser.sub
+                };
+            } catch (decodeError) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Failed to decode Google credential'
+                });
+            }
+        } else {
+            return res.status(400).json({
+                success: false,
+                message: 'Google credentials are required'
+            });
+        }
+
+        // Check if user exists with this Google ID
+        let user = await User.findOne({ googleId: userData.googleId });
+
+        if (!user) {
+            // Check if user exists with this email (might have signed up with email/password)
+            user = await User.findOne({ email: userData.email });
+
+            if (user) {
+                // Link Google account to existing user
+                user.googleId = userData.googleId;
+                user.avatar = userData.picture;
+                user.lastLogin = new Date();
+                await user.save();
+            } else {
+                // Create new user with Google
+                user = new User({
+                    name: userData.name,
+                    email: userData.email,
+                    googleId: userData.googleId,
+                    avatar: userData.picture,
+                    authProvider: 'google',
+                    lastLogin: new Date()
+                });
+                await user.save();
+            }
+        } else {
+            // Update last login
+            user.lastLogin = new Date();
+            await user.save();
+        }
+
+        // Generate token
+        const token = generateToken(user._id);
+
+        res.json({
+            success: true,
+            message: user.createdAt === user.updatedAt ? 'Account created successfully!' : 'Welcome back!',
+            token,
+            user: user.toJSON()
+        });
+
+    } catch (error) {
+        console.error('Google auth error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to authenticate with Google. Please try again.'
+        });
+    }
+});
+
 export default router;
+
