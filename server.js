@@ -23,9 +23,10 @@ const app = express();
 
 // CORS Configuration - Allow both public site and admin dashboard
 const allowedOrigins = [
-    'http://localhost:5173',  // Public frontend
+    'http://localhost:5173',  // Public frontend (local)
     'http://localhost:3000',
-    'http://localhost:5174',  // Admin frontend
+    'http://localhost:5174',  // Admin frontend (local)
+    'https://amman-admin.vercel.app',  // Admin frontend (production)
     process.env.ADMIN_FRONTEND_URL
 ].filter(Boolean);
 app.use(cors({
