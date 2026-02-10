@@ -28,12 +28,13 @@ const allowedOrigins = [
     'http://localhost:5174',  // Admin frontend
     process.env.ADMIN_FRONTEND_URL
 ].filter(Boolean);
-
 app.use(cors({
     origin: function (origin, callback) {
+        console.log('📌 Incoming request from origin:', origin || 'No origin (server-to-server)');
         if (!origin || allowedOrigins.includes(origin)) {
             callback(null, true);
         } else {
+            console.log('❌ Blocked origin:', origin);
             callback(new Error('Not allowed by CORS'));
         }
     },
