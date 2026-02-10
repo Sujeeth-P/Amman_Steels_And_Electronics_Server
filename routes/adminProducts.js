@@ -130,7 +130,7 @@ router.get('/:id', authorize(...PERMISSIONS.VIEW_PRODUCTS), async (req, res) => 
 // @access  Private (admin, super_admin)
 router.post('/', authorize(...PERMISSIONS.MANAGE_PRODUCTS), [
     body('name').trim().notEmpty().withMessage('Product name is required'),
-    body('category').isIn(['steel', 'cement', 'electronics', 'paints']).withMessage('Invalid category'),
+    body('category').isIn(['steel', 'cement', 'electronics', 'paints', 'pipes']).withMessage('Invalid category'),
     body('price').isFloat({ min: 0 }).withMessage('Price must be a positive number'),
     body('unit').trim().notEmpty().withMessage('Unit is required'),
     body('description').trim().notEmpty().withMessage('Description is required')

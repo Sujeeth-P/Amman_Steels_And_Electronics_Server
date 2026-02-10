@@ -35,7 +35,7 @@ const productSchema = new mongoose.Schema({
     category: {
         type: String,
         required: [true, 'Category is required'],
-        enum: ['steel', 'cement', 'electronics', 'paints'],
+        enum: ['steel', 'cement', 'electronics', 'paints', 'pipes'],
         lowercase: true
     },
     price: {

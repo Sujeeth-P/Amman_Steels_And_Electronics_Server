@@ -13,6 +13,8 @@ import adminProductsRoutes from './routes/adminProducts.js';
 import adminStockRoutes from './routes/adminStock.js';
 import adminOrdersRoutes from './routes/adminOrders.js';
 import adminReportsRoutes from './routes/adminReports.js';
+import enquiriesRoutes from './routes/enquiries.js';
+import adminEnquiriesRoutes from './routes/adminEnquiries.js';
 
 // Load environment variables
 dotenv.config();
@@ -52,6 +54,8 @@ app.use('/api/admin/products', adminProductsRoutes);
 app.use('/api/admin/stock', adminStockRoutes);
 app.use('/api/admin/orders', adminOrdersRoutes);
 app.use('/api/admin/reports', adminReportsRoutes);
+app.use('/api/enquiries', enquiriesRoutes);
+app.use('/api/admin/enquiries', adminEnquiriesRoutes);
 
 // Health check route
 app.get('/api/health', (req, res) => {
