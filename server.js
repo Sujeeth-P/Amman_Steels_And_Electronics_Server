@@ -27,6 +27,7 @@ const allowedOrigins = [
     'http://localhost:3000',
     'http://localhost:5174',  // Admin frontend (local)
     'https://amman-admin.vercel.app',  // Admin frontend (production)
+    'https://sriamman.vercel.app',     // Public frontend (production)
     process.env.ADMIN_FRONTEND_URL
 ].filter(Boolean);
 app.use(cors({
