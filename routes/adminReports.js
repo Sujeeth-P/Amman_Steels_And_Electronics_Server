@@ -96,6 +96,59 @@ router.get('/products', authorize(...PERMISSIONS.VIEW_REPORTS), async (req, res)
     }
 });
 
+// GET /api/admin/reports/customers
+router.get('/customers', authorize(...PERMISSIONS.VIEW_REPORTS), async (req, res) => {
+    try {
+        const customerData = await Order.aggregate([
+            { $match: { status: { $ne: 'cancelled' } } },
+            { $unwind: '$items' },
+            {
+                $group: {
+                    _id: '$customer.name',
+                    phone: { $first: '$customer.phone' },
+                    email: { $first: '$customer.email' },
+                    address: { $first: '$customer.address' },
+                    gstin: { $first: '$customer.gstin' },
+                    totalOrders: { $addToSet: '$_id' },
+                    totalSpent: { $sum: '$items.totalAmount' },
+                    lastOrderDate: { $max: '$createdAt' },
+                    products: {
+                        $push: {
+                            productName: '$items.productName',
+                            quantity: '$items.quantity',
+                            unitPrice: '$items.unitPrice',
+                            totalAmount: '$items.totalAmount'
+                        }
+                    }
+                }
+            },
+            {
+                $project: {
+                    _id: 1,
+                    phone: 1,
+                    email: 1,
+                    address: 1,
+                    gstin: 1,
+                    totalOrders: { $size: '$totalOrders' },
+                    totalSpent: 1,
+                    lastOrderDate: 1,
+                    products: 1
+                }
+            },
+            { $sort: { totalSpent: -1 } },
+            { $limit: 50 }
+        ]);
+
+        res.json({
+            success: true,
+            data: { customers: customerData }
+        });
+    } catch (error) {
+        console.error('Customer report error:', error);
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
+});
+
 // GET /api/admin/reports/analytics (super_admin only)
 router.get('/analytics', authorize(...PERMISSIONS.VIEW_ALL_REPORTS), async (req, res) => {
     try {
