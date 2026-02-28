@@ -185,4 +185,35 @@ router.get('/categories/list', async (req, res) => {
     }
 });
 
+// @route   GET /api/products/stock/availability
+// @desc    Get stock availability for all products (public)
+// @access  Public
+router.get('/stock/availability', async (req, res) => {
+    try {
+        const products = await Product.find()
+            .select('id name category stockQuantity inStock unit image price')
+            .sort({ category: 1, name: 1 });
+
+        res.json({
+            success: true,
+            data: products.map(p => ({
+                id: p.id,
+                name: p.name,
+                category: p.category,
+                stockQuantity: p.stockQuantity || 0,
+                inStock: p.stockQuantity > 0,
+                unit: p.unit,
+                image: p.image,
+                price: p.price
+            }))
+        });
+    } catch (error) {
+        console.error('Get stock availability error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error'
+        });
+    }
+});
+
 export default router;

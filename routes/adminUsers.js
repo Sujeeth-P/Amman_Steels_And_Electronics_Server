@@ -5,13 +5,43 @@ import { authenticate, authorize, ROLES } from '../middleware/auth.js';
 
 const router = express.Router();
 
-// All routes require super_admin authentication
-router.use(authenticate, authorize(ROLES.SUPER_ADMIN));
+// All routes require authentication
+router.use(authenticate);
+
+// @route   GET /api/admin/users/role/staff
+// @desc    Get staff/admin users for assignment dropdowns (accessible by staff+)
+// @access  Private (staff, admin, super_admin)
+router.get('/role/staff', authorize(ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.STAFF), async (req, res) => {
+    try {
+        const users = await User.find({
+            role: { $in: ['admin', 'staff'] },
+            isActive: true
+        }).select('name email role').sort({ name: 1 });
+
+        res.json({
+            success: true,
+            data: {
+                users: users.map(u => ({
+                    id: u._id,
+                    name: u.name,
+                    email: u.email,
+                    role: u.role
+                }))
+            }
+        });
+    } catch (error) {
+        console.error('Get staff list error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error'
+        });
+    }
+});
 
 // @route   GET /api/admin/users
 // @desc    Get all admin users with pagination
 // @access  Private (super_admin)
-router.get('/', [
+router.get('/', authorize(ROLES.SUPER_ADMIN), [
     query('page').optional().isInt({ min: 1 }).toInt(),
     query('limit').optional().isInt({ min: 1, max: 100 }).toInt(),
     query('role').optional().isIn(['super_admin', 'admin', 'staff']),
@@ -79,7 +109,7 @@ router.get('/', [
 // @route   GET /api/admin/users/stats
 // @desc    Get user statistics
 // @access  Private (super_admin)
-router.get('/stats', async (req, res) => {
+router.get('/stats', authorize(ROLES.SUPER_ADMIN), async (req, res) => {
     try {
         const filter = { role: { $in: ['super_admin', 'admin', 'staff'] } };
 
@@ -118,7 +148,7 @@ router.get('/stats', async (req, res) => {
 // @route   GET /api/admin/users/:id
 // @desc    Get single user
 // @access  Private (super_admin)
-router.get('/:id', async (req, res) => {
+router.get('/:id', authorize(ROLES.SUPER_ADMIN), async (req, res) => {
     try {
         const user = await User.findById(req.params.id)
             .populate('createdBy', 'name email');
@@ -156,7 +186,7 @@ router.get('/:id', async (req, res) => {
 // @route   PUT /api/admin/users/:id
 // @desc    Update user
 // @access  Private (super_admin)
-router.put('/:id', [
+router.put('/:id', authorize(ROLES.SUPER_ADMIN), [
     body('name').optional().trim().isLength({ min: 2, max: 50 }),
     body('email').optional().isEmail(),
     body('role').optional().isIn(['super_admin', 'admin', 'staff']),
@@ -249,7 +279,7 @@ router.put('/:id', [
 // @route   PUT /api/admin/users/:id/reset-password
 // @desc    Reset user password
 // @access  Private (super_admin)
-router.put('/:id/reset-password', [
+router.put('/:id/reset-password', authorize(ROLES.SUPER_ADMIN), [
     body('newPassword').isLength({ min: 6 }).withMessage('Password must be at least 6 characters')
 ], async (req, res) => {
     try {
@@ -288,7 +318,7 @@ router.put('/:id/reset-password', [
 // @route   DELETE /api/admin/users/:id
 // @desc    Delete user (soft delete by deactivating)
 // @access  Private (super_admin)
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', authorize(ROLES.SUPER_ADMIN), async (req, res) => {
     try {
         // Cannot delete self
         if (req.params.id === req.user._id.toString()) {

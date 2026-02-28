@@ -67,6 +67,16 @@ const productSchema = new mongoose.Schema({
         type: Boolean,
         default: true
     },
+    stockQuantity: {
+        type: Number,
+        default: 0,
+        min: 0
+    },
+    lowStockThreshold: {
+        type: Number,
+        default: 100,
+        min: 0
+    },
     reviews: [reviewSchema],
     createdAt: {
         type: Date,

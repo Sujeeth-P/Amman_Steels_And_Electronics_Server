@@ -72,7 +72,7 @@ router.get('/', authorize(ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.STAFF), async (r
 });
 
 // GET /api/admin/enquiries/stats - Enquiry statistics
-router.get('/stats', authorize(ROLES.SUPER_ADMIN, ROLES.ADMIN), async (req, res) => {
+router.get('/stats', authorize(ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.STAFF), async (req, res) => {
     try {
         const today = new Date();
         today.setHours(0, 0, 0, 0);

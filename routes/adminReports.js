@@ -46,6 +46,7 @@ router.get('/sales', authorize(...PERMISSIONS.VIEW_SALES), async (req, res) => {
         const { startDate, endDate, groupBy = 'day' } = req.query;
         const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
         const end = endDate ? new Date(endDate) : new Date();
+        end.setHours(23, 59, 59, 999);
 
         const dateFormat = groupBy === 'month' ? '%Y-%m' : groupBy === 'week' ? '%Y-W%V' : '%Y-%m-%d';
 
@@ -75,8 +76,22 @@ router.get('/sales', authorize(...PERMISSIONS.VIEW_SALES), async (req, res) => {
 // GET /api/admin/reports/products
 router.get('/products', authorize(...PERMISSIONS.VIEW_REPORTS), async (req, res) => {
     try {
+        const { startDate, endDate } = req.query;
+
+        // Build date match filter
+        const dateMatch = { status: { $ne: 'cancelled' } };
+        if (startDate || endDate) {
+            dateMatch.createdAt = {};
+            if (startDate) dateMatch.createdAt.$gte = new Date(startDate);
+            if (endDate) {
+                const end = new Date(endDate);
+                end.setHours(23, 59, 59, 999);
+                dateMatch.createdAt.$lte = end;
+            }
+        }
+
         const topProducts = await Order.aggregate([
-            { $match: { status: { $ne: 'cancelled' } } },
+            { $match: dateMatch },
             { $unwind: '$items' },
             { $group: { _id: '$items.productName', totalSold: { $sum: '$items.quantity' }, revenue: { $sum: '$items.totalAmount' } } },
             { $sort: { totalSold: -1 } },
@@ -99,8 +114,22 @@ router.get('/products', authorize(...PERMISSIONS.VIEW_REPORTS), async (req, res)
 // GET /api/admin/reports/customers
 router.get('/customers', authorize(...PERMISSIONS.VIEW_REPORTS), async (req, res) => {
     try {
+        const { startDate, endDate } = req.query;
+
+        // Build date match filter
+        const dateMatch = { status: { $ne: 'cancelled' } };
+        if (startDate || endDate) {
+            dateMatch.createdAt = {};
+            if (startDate) dateMatch.createdAt.$gte = new Date(startDate);
+            if (endDate) {
+                const end = new Date(endDate);
+                end.setHours(23, 59, 59, 999);
+                dateMatch.createdAt.$lte = end;
+            }
+        }
+
         const customerData = await Order.aggregate([
-            { $match: { status: { $ne: 'cancelled' } } },
+            { $match: dateMatch },
             { $unwind: '$items' },
             {
                 $group: {
@@ -152,27 +181,44 @@ router.get('/customers', authorize(...PERMISSIONS.VIEW_REPORTS), async (req, res
 // GET /api/admin/reports/analytics (super_admin only)
 router.get('/analytics', authorize(...PERMISSIONS.VIEW_ALL_REPORTS), async (req, res) => {
     try {
-        const last30Days = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+        const { startDate, endDate } = req.query;
 
-        const [userStats, orderTrend, stockMovements] = await Promise.all([
+        // Build date filter - default to last 30 days if no range provided
+        let dateStart, dateEnd;
+        if (startDate || endDate) {
+            dateStart = startDate ? new Date(startDate) : new Date(0);
+            dateEnd = endDate ? new Date(endDate) : new Date();
+            dateEnd.setHours(23, 59, 59, 999);
+        } else {
+            dateStart = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+            dateEnd = new Date();
+        }
+
+        const [userStats, orderTrend, stockMovements, stockMovementDetails] = await Promise.all([
             User.aggregate([
                 { $match: { role: { $in: ['super_admin', 'admin', 'staff'] } } },
                 { $group: { _id: '$role', count: { $sum: 1 } } }
             ]),
             Order.aggregate([
-                { $match: { createdAt: { $gte: last30Days } } },
+                { $match: { createdAt: { $gte: dateStart, $lte: dateEnd } } },
                 { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, count: { $sum: 1 }, revenue: { $sum: '$grandTotal' } } },
                 { $sort: { _id: 1 } }
             ]),
             StockMovement.aggregate([
-                { $match: { createdAt: { $gte: last30Days } } },
+                { $match: { createdAt: { $gte: dateStart, $lte: dateEnd } } },
                 { $group: { _id: '$type', count: { $sum: 1 }, totalQty: { $sum: '$quantity' } } }
-            ])
+            ]),
+            StockMovement.find({ createdAt: { $gte: dateStart, $lte: dateEnd } })
+                .populate('product', 'name sku category')
+                .populate('createdBy', 'name')
+                .sort({ createdAt: -1 })
+                .limit(100)
+                .lean()
         ]);
 
         res.json({
             success: true,
-            data: { userStats, orderTrend, stockMovements }
+            data: { userStats, orderTrend, stockMovements, stockMovementDetails }
         });
     } catch (error) {
         res.status(500).json({ success: false, message: 'Server error' });
