@@ -18,21 +18,21 @@ const User = mongoose.model('User', userSchema);
 const demoUsers = [
     {
         name: 'Super Admin',
-        email: 'superadmin@sriamman.com',
+        email: 'sriammansteels.official@gmail.com',
         password: 'Admin@123',
         role: 'super_admin',
         phone: '9876543210'
     },
     {
         name: 'Admin User',
-        email: 'admin@sriamman.com',
+        email: 'sriammansteels.official+admin@gmail.com',
         password: 'Admin@123',
         role: 'admin',
         phone: '9876543211'
     },
     {
         name: 'Staff User',
-        email: 'staff@sriamman.com',
+        email: 'sriammansteels.official+staff@gmail.com',
         password: 'Staff@123',
         role: 'staff',
         phone: '9876543212'
@@ -68,17 +68,17 @@ const seedAdmin = async () => {
         console.log('========================================\n');
 
         console.log('🔴 SUPER ADMIN (Full Access)');
-        console.log('   Email: superadmin@sriamman.com');
+        console.log('   Email: sriammansteels.official@gmail.com');
         console.log('   Password: Admin@123');
         console.log('   Access: All pages, user management, reports\n');
 
         console.log('🟠 ADMIN (Product & Stock Management)');
-        console.log('   Email: admin@sriamman.com');
+        console.log('   Email: sriammansteels.official+admin@gmail.com');
         console.log('   Password: Admin@123');
         console.log('   Access: Products, Stock, Sales, Billing\n');
 
         console.log('🟢 STAFF (Billing Only)');
-        console.log('   Email: staff@sriamman.com');
+        console.log('   Email: sriammansteels.official+staff@gmail.com');
         console.log('   Password: Staff@123');
         console.log('   Access: Billing, Orders\n');
 

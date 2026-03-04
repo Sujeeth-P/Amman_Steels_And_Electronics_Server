@@ -3,7 +3,7 @@ import { body, validationResult, query } from 'express-validator';
 import Product from '../models/Product.js';
 import StockMovement from '../models/StockMovement.js';
 import { authenticate, authorize, PERMISSIONS } from '../middleware/auth.js';
-import { checkAndAlertLowStock } from '../utils/mailer.js';
+import { checkAndAlertLowStock, sendLowStockBatchAlert } from '../utils/mailer.js';
 
 const router = express.Router();
 
@@ -445,14 +445,12 @@ router.post('/check-alerts', authorize(...PERMISSIONS.MANAGE_STOCK), async (req,
 
         const outOfStockProducts = await Product.find({ stockQuantity: 0 });
 
-        // Send alerts for each low stock product
-        for (const product of lowStockProducts) {
-            await checkAndAlertLowStock(product, product.stockQuantity);
-        }
+        // Send ONE consolidated email with all low stock items
+        await sendLowStockBatchAlert(lowStockProducts, outOfStockProducts);
 
         res.json({
             success: true,
-            message: `Found ${lowStockProducts.length} low stock and ${outOfStockProducts.length} out of stock products. Alerts sent.`,
+            message: `Found ${lowStockProducts.length} low stock and ${outOfStockProducts.length} out of stock products. Alert email sent.`,
             data: {
                 lowStock: lowStockProducts.map(p => ({ id: p.id, name: p.name, stockQuantity: p.stockQuantity, threshold: p.lowStockThreshold })),
                 outOfStock: outOfStockProducts.map(p => ({ id: p.id, name: p.name }))

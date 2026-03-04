@@ -13,37 +13,80 @@ const createTransporter = () => {
 };
 
 /**
- * Send low stock alert email to all admins
- * @param {Object} product - The product that is low on stock
- * @param {Number} currentStock - Current stock quantity
+ * Get valid admin email addresses (filters out placeholder domains)
  */
-export const sendLowStockAlert = async (product, currentStock) => {
-    try {
-        // Get all admin and super_admin users
-        const admins = await User.find({
-            role: { $in: ['admin', 'super_admin'] },
-            isActive: true
-        }).select('email name');
+const getAdminEmails = async () => {
+    const admins = await User.find({
+        role: { $in: ['admin', 'super_admin'] },
+        isActive: true
+    }).select('email name');
 
-        if (!admins.length) {
-            console.log('⚠️ No admin users found to send low stock alert');
+    const invalidDomains = ['sriamman.com', 'example.com', 'test.com', 'localhost'];
+    return admins
+        .map(a => a.email)
+        .filter(email => {
+            if (!email) return false;
+            const domain = email.split('@')[1]?.toLowerCase();
+            return domain && !invalidDomains.includes(domain);
+        });
+};
+
+/**
+ * Send a single consolidated low stock alert email with ALL low/out-of-stock items
+ * @param {Array} lowStockProducts - Products below threshold but > 0
+ * @param {Array} outOfStockProducts - Products with 0 stock
+ */
+export const sendLowStockBatchAlert = async (lowStockProducts = [], outOfStockProducts = []) => {
+    try {
+        const totalAlerts = lowStockProducts.length + outOfStockProducts.length;
+        if (totalAlerts === 0) {
+            console.log('✅ All products are well-stocked. No alerts to send.');
             return;
         }
 
-        const adminEmails = admins.map(a => a.email).filter(Boolean);
+        const adminEmails = await getAdminEmails();
 
         if (!adminEmails.length) {
-            console.log('⚠️ No admin emails found');
+            console.log('⚠️ No valid admin email addresses found. Skipping email alert.');
+            console.log(`📦 LOW STOCK SUMMARY: ${lowStockProducts.length} low stock, ${outOfStockProducts.length} out of stock`);
             return;
         }
 
         if (!process.env.SMTP_EMAIL || !process.env.SMTP_PASSWORD) {
             console.log('⚠️ SMTP credentials not configured. Skipping email alert.');
-            console.log(`📦 LOW STOCK ALERT: ${product.name} - Only ${currentStock} left (threshold: ${product.lowStockThreshold})`);
             return;
         }
 
         const transporter = createTransporter();
+        const alertDate = new Date().toLocaleDateString('en-IN', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+
+        const buildProductRows = (products, color) => {
+            if (!products.length) return '';
+            return products.map((p, i) => `
+                <tr style="background:${i % 2 === 0 ? '#ffffff' : '#f8fafc'};">
+                    <td style="padding:10px 16px;font-size:13px;color:#0f172a;font-weight:500;border-bottom:1px solid #f1f5f9;">${p.name}</td>
+                    <td style="padding:10px 16px;font-size:12px;color:#64748b;border-bottom:1px solid #f1f5f9;text-transform:capitalize;">${p.category}</td>
+                    <td style="padding:10px 16px;font-size:13px;font-weight:700;color:${color};border-bottom:1px solid #f1f5f9;text-align:center;">${p.stockQuantity || 0} ${p.unit || 'pcs'}</td>
+                    <td style="padding:10px 16px;font-size:12px;color:#64748b;border-bottom:1px solid #f1f5f9;text-align:center;">${p.lowStockThreshold || 10} ${p.unit || 'pcs'}</td>
+                </tr>
+            `).join('');
+        };
+
+        const tableHeader = `
+            <tr style="background:#f1f5f9;">
+                <td style="padding:10px 16px;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid #e2e8f0;">Product</td>
+                <td style="padding:10px 16px;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid #e2e8f0;">Category</td>
+                <td style="padding:10px 16px;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid #e2e8f0;text-align:center;">Stock</td>
+                <td style="padding:10px 16px;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid #e2e8f0;text-align:center;">Threshold</td>
+            </tr>
+        `;
 
         const htmlContent = `
         <!DOCTYPE html>
@@ -52,98 +95,150 @@ export const sendLowStockAlert = async (product, currentStock) => {
             <meta charset="utf-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
         </head>
-        <body style="margin:0;padding:0;background-color:#f8fafc;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;">
-            <div style="max-width:600px;margin:0 auto;padding:20px;">
-                <!-- Header -->
-                <div style="background:linear-gradient(135deg, #f59e0b 0%, #d97706 100%);border-radius:16px 16px 0 0;padding:30px;text-align:center;">
-                    <div style="font-size:48px;margin-bottom:10px;">⚠️</div>
-                    <h1 style="color:#ffffff;margin:0;font-size:24px;font-weight:700;">Low Stock Alert</h1>
-                    <p style="color:#fef3c7;margin:8px 0 0;font-size:14px;">Immediate attention required</p>
-                </div>
+        <body style="margin:0;padding:0;background-color:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+            <div style="max-width:620px;margin:0 auto;padding:32px 16px;">
                 
-                <!-- Body -->
-                <div style="background:#ffffff;padding:30px;border-radius:0 0 16px 16px;box-shadow:0 4px 6px rgba(0,0,0,0.05);">
-                    <p style="color:#334155;font-size:16px;margin:0 0 20px;line-height:1.6;">
-                        The following product has fallen below the minimum stock threshold and needs to be restocked:
-                    </p>
+                <!-- Main Card -->
+                <div style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
                     
-                    <!-- Product Card -->
-                    <div style="background:#fefce8;border:1px solid #fde68a;border-radius:12px;padding:20px;margin:0 0 20px;">
-                        <table style="width:100%;border-collapse:collapse;">
+                    <!-- Top Accent -->
+                    <div style="height:4px;background:linear-gradient(90deg, ${outOfStockProducts.length > 0 ? '#dc2626' : '#d97706'} 0%, #0f172a 100%);"></div>
+                    
+                    <!-- Header -->
+                    <div style="padding:28px 32px 0;">
+                        <table style="width:100%;" cellpadding="0" cellspacing="0">
                             <tr>
-                                <td style="padding:8px 0;color:#92400e;font-weight:600;width:140px;">Product Name</td>
-                                <td style="padding:8px 0;color:#1e293b;font-weight:700;">${product.name}</td>
-                            </tr>
-                            <tr>
-                                <td style="padding:8px 0;color:#92400e;font-weight:600;">Product ID</td>
-                                <td style="padding:8px 0;color:#1e293b;">${product.id}</td>
-                            </tr>
-                            <tr>
-                                <td style="padding:8px 0;color:#92400e;font-weight:600;">Category</td>
-                                <td style="padding:8px 0;color:#1e293b;text-transform:capitalize;">${product.category}</td>
-                            </tr>
-                            <tr>
-                                <td style="padding:8px 0;color:#92400e;font-weight:600;">Current Stock</td>
-                                <td style="padding:8px 0;">
-                                    <span style="background:#dc2626;color:#ffffff;padding:4px 12px;border-radius:20px;font-weight:700;font-size:14px;">
-                                        ${currentStock} ${product.unit}
-                                    </span>
+                                <td>
+                                    <span style="font-size:18px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;">Sri Amman Steels</span>
+                                    <span style="display:block;font-size:12px;color:#94a3b8;margin-top:2px;">Stock Alert Report</span>
                                 </td>
-                            </tr>
-                            <tr>
-                                <td style="padding:8px 0;color:#92400e;font-weight:600;">Alert Threshold</td>
-                                <td style="padding:8px 0;">
-                                    <span style="background:#f59e0b;color:#ffffff;padding:4px 12px;border-radius:20px;font-weight:700;font-size:14px;">
-                                        ${product.lowStockThreshold} ${product.unit}
+                                <td style="text-align:right;">
+                                    <span style="display:inline-block;background:${outOfStockProducts.length > 0 ? '#dc2626' : '#d97706'};color:#ffffff;font-size:11px;font-weight:700;padding:5px 12px;border-radius:4px;letter-spacing:0.5px;">
+                                        ${totalAlerts} ALERT${totalAlerts > 1 ? 'S' : ''}
                                     </span>
                                 </td>
                             </tr>
                         </table>
                     </div>
-                    
-                    <!-- Action -->
-                    <div style="text-align:center;margin:25px 0 10px;">
-                        <a href="${process.env.ADMIN_FRONTEND_URL || 'http://localhost:5174'}/stock" 
-                           style="display:inline-block;background:linear-gradient(135deg, #f59e0b 0%, #d97706 100%);color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:10px;font-weight:700;font-size:15px;">
-                            📦 Manage Stock Now
+
+                    <div style="padding:0 32px;"><hr style="border:none;border-top:1px solid #e2e8f0;margin:20px 0;"></div>
+
+                    <!-- Summary Cards -->
+                    <div style="padding:0 32px;">
+                        <table style="width:100%;border-collapse:collapse;" cellpadding="0" cellspacing="0">
+                            <tr>
+                                <td style="width:50%;padding:0 4px 0 0;">
+                                    <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:14px;text-align:center;">
+                                        <div style="font-size:22px;font-weight:800;color:#d97706;">${lowStockProducts.length}</div>
+                                        <div style="font-size:11px;color:#d97706;margin-top:4px;text-transform:uppercase;letter-spacing:0.3px;">Low Stock</div>
+                                    </div>
+                                </td>
+                                <td style="width:50%;padding:0 0 0 4px;">
+                                    <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:14px;text-align:center;">
+                                        <div style="font-size:22px;font-weight:800;color:#dc2626;">${outOfStockProducts.length}</div>
+                                        <div style="font-size:11px;color:#dc2626;margin-top:4px;text-transform:uppercase;letter-spacing:0.3px;">Out of Stock</div>
+                                    </div>
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+
+                    <!-- Alert Message -->
+                    <div style="padding:20px 32px 0;">
+                        <p style="color:#334155;font-size:14px;line-height:1.7;margin:0;">
+                            The following products need attention — ${totalAlerts} product${totalAlerts > 1 ? 's have' : ' has'} fallen below the minimum stock threshold.
+                        </p>
+                    </div>
+
+                    ${outOfStockProducts.length > 0 ? `
+                    <!-- Out of Stock Section -->
+                    <div style="padding:24px 32px 0;">
+                        <h3 style="margin:0 0 12px;font-size:14px;font-weight:700;color:#dc2626;">
+                            <span style="display:inline-block;width:8px;height:8px;background:#dc2626;border-radius:50%;margin-right:8px;vertical-align:middle;"></span>
+                            Out of Stock (${outOfStockProducts.length})
+                        </h3>
+                        <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
+                            ${tableHeader}
+                            ${buildProductRows(outOfStockProducts, '#dc2626')}
+                        </table>
+                    </div>
+                    ` : ''}
+
+                    ${lowStockProducts.length > 0 ? `
+                    <!-- Low Stock Section -->
+                    <div style="padding:24px 32px 0;">
+                        <h3 style="margin:0 0 12px;font-size:14px;font-weight:700;color:#d97706;">
+                            <span style="display:inline-block;width:8px;height:8px;background:#d97706;border-radius:50%;margin-right:8px;vertical-align:middle;"></span>
+                            Low Stock (${lowStockProducts.length})
+                        </h3>
+                        <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
+                            ${tableHeader}
+                            ${buildProductRows(lowStockProducts, '#d97706')}
+                        </table>
+                    </div>
+                    ` : ''}
+
+                    <!-- CTA Button -->
+                    <div style="padding:28px 32px;text-align:center;">
+                        <a href="${process.env.ADMIN_FRONTEND_URL || 'http://localhost:5174'}/admin/stock" 
+                           style="display:inline-block;background:#0f172a;color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:6px;font-weight:600;font-size:13px;letter-spacing:0.3px;">
+                            Open Stock Dashboard
                         </a>
                     </div>
-                    
-                    <hr style="border:none;border-top:1px solid #e2e8f0;margin:20px 0;">
-                    
-                    <p style="color:#94a3b8;font-size:12px;margin:0;text-align:center;line-height:1.5;">
-                        This is an automated alert from Sri Amman Steels & Hardware inventory system.<br>
-                        Sent on ${new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                    </p>
+
+                    <!-- Footer -->
+                    <div style="background:#f8fafc;padding:20px 32px;border-top:1px solid #e2e8f0;">
+                        <p style="color:#94a3b8;font-size:11px;margin:0;line-height:1.6;text-align:center;">
+                            Automated notification &bull; Sri Amman Steels &amp; Hardware<br>
+                            ${alertDate}
+                        </p>
+                    </div>
+
                 </div>
             </div>
         </body>
         </html>
         `;
 
+        const subjectParts = [];
+        if (outOfStockProducts.length > 0) subjectParts.push(`${outOfStockProducts.length} out of stock`);
+        if (lowStockProducts.length > 0) subjectParts.push(`${lowStockProducts.length} low stock`);
+
         const mailOptions = {
             from: `"Sri Amman Steels - Inventory" <${process.env.SMTP_EMAIL}>`,
             to: adminEmails.join(', '),
-            subject: `⚠️ Low Stock Alert: ${product.name} - Only ${currentStock} left`,
+            subject: `Stock Alert — ${subjectParts.join(', ')}`,
             html: htmlContent
         };
 
         const info = await transporter.sendMail(mailOptions);
-        console.log(`📧 Low stock alert sent to ${adminEmails.length} admin(s): ${info.messageId}`);
+        console.log(`📧 Stock alert sent to ${adminEmails.length} admin(s): ${info.messageId}`);
         return info;
     } catch (error) {
-        console.error('❌ Failed to send low stock alert email:', error.message);
-        // Don't throw - email failure shouldn't break stock operations
+        console.error('❌ Failed to send stock alert email:', error.message);
     }
 };
 
 /**
- * Check stock level and send alert if needed
+ * Check stock level after a stock operation and send batch alert if needed
+ * Fetches ALL low stock and out-of-stock products so the email gives a complete picture
  * @param {Object} product - The product to check
  * @param {Number} newStock - The new stock quantity
  */
 export const checkAndAlertLowStock = async (product, newStock) => {
     if (newStock <= product.lowStockThreshold) {
-        await sendLowStockAlert(product, newStock);
+        // Dynamically import Product model to avoid circular dependency
+        const Product = (await import('../models/Product.js')).default;
+
+        // Fetch ALL low stock and out-of-stock products from DB
+        const [lowStockProducts, outOfStockProducts] = await Promise.all([
+            Product.find({
+                stockQuantity: { $gt: 0 },
+                $expr: { $lte: ['$stockQuantity', '$lowStockThreshold'] }
+            }),
+            Product.find({ stockQuantity: 0 })
+        ]);
+
+        await sendLowStockBatchAlert(lowStockProducts, outOfStockProducts);
     }
 };

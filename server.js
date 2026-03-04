@@ -15,6 +15,7 @@ import adminOrdersRoutes from './routes/adminOrders.js';
 import adminReportsRoutes from './routes/adminReports.js';
 import enquiriesRoutes from './routes/enquiries.js';
 import adminEnquiriesRoutes from './routes/adminEnquiries.js';
+import { initStockScheduler } from './utils/stockScheduler.js';
 
 // Load environment variables
 dotenv.config();
@@ -84,6 +85,9 @@ connectDB().then(() => {
         console.log(`🚀 Server running on port ${PORT}`);
         console.log(`📡 API endpoint: http://localhost:${PORT}/api`);
         console.log(`🔐 Admin API: http://localhost:${PORT}/api/admin`);
+
+        // Initialize daily stock report scheduler (9:00 PM IST)
+        initStockScheduler();
     });
 });
 
