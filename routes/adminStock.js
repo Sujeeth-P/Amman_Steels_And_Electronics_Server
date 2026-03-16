@@ -273,9 +273,14 @@ router.post('/in', authorize(...PERMISSIONS.MANAGE_STOCK), [
 
         await movement.save();
 
-        // Update product stock quantity
+        // Update product stock quantity and price
         product.stockQuantity = newStock;
         product.inStock = true;
+        // Update product price if a new unit price is provided
+        const parsedUnitPrice = unitPrice ? parseFloat(unitPrice) : null;
+        if (parsedUnitPrice && parsedUnitPrice > 0) {
+            product.price = parsedUnitPrice;
+        }
         await product.save();
 
         res.status(201).json({

@@ -83,6 +83,7 @@ router.get('/stats', authorize(ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.STAFF), asy
             contacted,
             quoted,
             converted,
+            closed,
             todayCount,
             highPriority
         ] = await Promise.all([
@@ -91,6 +92,7 @@ router.get('/stats', authorize(ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.STAFF), asy
             Enquiry.countDocuments({ status: 'contacted' }),
             Enquiry.countDocuments({ status: 'quoted' }),
             Enquiry.countDocuments({ status: 'converted' }),
+            Enquiry.countDocuments({ status: 'closed' }),
             Enquiry.countDocuments({ createdAt: { $gte: today } }),
             Enquiry.countDocuments({ status: 'pending', priority: 'high' })
         ]);
@@ -103,6 +105,7 @@ router.get('/stats', authorize(ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.STAFF), asy
                 contacted,
                 quoted,
                 converted,
+                closed,
                 today: todayCount,
                 highPriority
             }
@@ -150,7 +153,8 @@ router.put('/:id', authorize(ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.STAFF), [
     body('status').optional().isIn(['pending', 'contacted', 'quoted', 'converted', 'closed']),
     body('priority').optional().isIn(['low', 'medium', 'high']),
     body('adminNotes').optional().trim().isLength({ max: 2000 }),
-    body('quotedAmount').optional().isNumeric()
+    body('quotedAmount').optional().isNumeric(),
+    body('closingRemarks').optional().trim().isLength({ max: 2000 })
 ], async (req, res) => {
     try {
         const errors = validationResult(req);
@@ -170,13 +174,14 @@ router.put('/:id', authorize(ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.STAFF), [
             });
         }
 
-        const { status, priority, adminNotes, quotedAmount, assignedTo } = req.body;
+        const { status, priority, adminNotes, quotedAmount, assignedTo, closingRemarks } = req.body;
 
         if (status) enquiry.status = status;
         if (priority) enquiry.priority = priority;
         if (adminNotes !== undefined) enquiry.adminNotes = adminNotes;
         if (quotedAmount !== undefined) enquiry.quotedAmount = quotedAmount;
         if (assignedTo !== undefined) enquiry.assignedTo = assignedTo || null;
+        if (closingRemarks !== undefined) enquiry.closingRemarks = closingRemarks;
 
         await enquiry.save();
 

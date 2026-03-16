@@ -65,6 +65,10 @@ const enquirySchema = new mongoose.Schema({
         type: Number,
         min: 0
     },
+    closingRemarks: {
+        type: String,
+        maxlength: 2000
+    },
     assignedTo: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User'

@@ -138,7 +138,7 @@ router.get('/my', authenticate, async (req, res) => {
             'customer.userId': req.user._id
         })
             .sort({ createdAt: -1 })
-            .select('enquiryNumber status estimatedTotal items createdAt source');
+            .select('enquiryNumber status estimatedTotal items createdAt source closingRemarks');
 
         res.json({
             success: true,
